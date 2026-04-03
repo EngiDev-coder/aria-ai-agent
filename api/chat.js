@@ -3,12 +3,17 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  const API_KEY = process.env.GEMINI_API_KEY;
+
+  if (!API_KEY) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY is missing in Vercel settings.' });
+  }
+
   try {
     const { userMessage } = req.body;
-    const API_KEY = process.env.GEMINI_API_KEY;
-
-    // Gemini requires the API key in the URL string
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+    
+    // Updated URL to use the most recent model identifier
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${API_KEY}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -16,7 +21,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         contents: [{
           parts: [{ 
-            text: `System: You are ARIA, a warm, gracious AI voice receptionist. Keep every response to 2-3 short sentences maximum. No markdown, no asterisks — plain spoken sentences only. \n\n User: ${userMessage}` 
+            text: `System: You are ARIA, a warm voice receptionist. Keep responses to 2 short sentences. No markdown. \n\n User: ${userMessage}` 
           }]
         }]
       })
@@ -25,17 +30,15 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Gemini API Error:", data);
-      return res.status(response.status).json({ error: data.error?.message || "Gemini API Error" });
+      console.error("Gemini Error:", data);
+      return res.status(response.status).json({ error: data.error?.message || "Gemini Error" });
     }
 
-    // Extract text from Gemini's specific JSON structure
     const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't process that.";
-    
     res.status(200).json({ reply });
 
   } catch (err) {
-    console.error('Server error:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Server Crash:", err);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 }
