@@ -284,7 +284,16 @@ async function handleUserSpeech(userText) {
     }
 
     const data = await res.json();
-    const reply = data.content?.find(b=>b.type==='text')?.text || 'I apologize, I was unable to respond.';
+    const res = await fetch(API_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    userMessage: userText
+  })
+});
+
+const data = await res.json();
+const reply = data.reply || "Sorry, I couldn't respond.";
     conversationHistory.push({ role:'assistant', content:reply });
     addHistory('aria', reply);
     speakText(reply);
