@@ -35,7 +35,6 @@
     background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
     pointer-events:none; z-index:100;
   }
-
   .not-supported {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
     background:var(--bg); z-index:200; text-align:center; padding:40px;
@@ -43,7 +42,6 @@
   }
   .not-supported.show { display:flex; }
   .not-supported h2 { font-family:'Cormorant Garamond',serif; font-size:28px; color:var(--gold); font-weight:300; }
-
   .stage {
     position:relative; z-index:10; display:flex; flex-direction:column;
     align-items:center; width:100%; max-width:520px; padding:40px 24px;
@@ -56,7 +54,6 @@
   }
   .brand-sub { font-size:9px; letter-spacing:0.5em; color:var(--muted); text-transform:uppercase; margin-top:8px; display:block; }
   @keyframes fadeDown { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
-
   .orb-stage { position:relative; width:220px; height:220px; display:flex; align-items:center; justify-content:center; margin-bottom:40px; }
   .ring { position:absolute; border-radius:50%; border:1px solid transparent; }
   .ring-1 { width:220px; height:220px; border-color:rgba(201,169,110,0.12); animation:ring-spin 20s linear infinite; }
@@ -68,7 +65,6 @@
   }
   .ring-2::before { background:var(--blue); box-shadow:0 0 8px var(--blue); }
   @keyframes ring-spin { to{transform:rotate(360deg)} }
-
   .orb-core {
     width:90px; height:90px; border-radius:50%;
     background:radial-gradient(circle at 35% 35%,rgba(232,213,163,0.9),rgba(201,169,110,0.6),rgba(100,80,40,0.8));
@@ -85,33 +81,27 @@
     animation:pulse-think 0.8s ease-in-out infinite alternate;
   }
   .orb-core.speaking { animation:pulse-speak 0.4s ease-in-out infinite alternate; box-shadow:0 0 50px rgba(201,169,110,0.4),0 0 100px rgba(201,169,110,0.15); }
-
   .waveform { position:absolute; bottom:-28px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:3px; opacity:0; transition:opacity 0.3s; }
   .waveform.active { opacity:1; }
   .wave-bar { width:3px; background:var(--blue); border-radius:2px; animation:wave-anim 0.8s ease-in-out infinite; height:6px; }
   @keyframes wave-anim { 0%,100%{height:4px;opacity:.4} 50%{height:20px;opacity:1} }
-
   .status-area { text-align:center; min-height:80px; display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:36px; }
-  .status-label { font-size:9px; letter-spacing:0.4em; text-transform:uppercase; color:var(--muted); }
+  .status-label { font-size:9px; letter-spacing:0.4em; text-transform:uppercase; color:var(--muted); transition:color 0.3s; }
   .transcript { font-family:'Cormorant Garamond',serif; font-style:italic; font-size:17px; color:rgba(237,233,225,0.7); text-align:center; min-height:52px; max-width:400px; padding:0 10px; }
-
   .mic-btn { width:72px; height:72px; border-radius:50%; border:2px solid rgba(201,169,110,0.3); background:rgba(14,14,22,0.8); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.3s; }
   .mic-btn.active { border-color:var(--blue); background:rgba(107,159,212,0.08); }
   .mic-btn svg { width:26px; height:26px; fill:var(--gold); }
   .mic-hint { font-size:9px; letter-spacing:0.25em; color:var(--muted); text-transform:uppercase; margin-top:10px; }
-
   .history { position:fixed; bottom:0; left:0; right:0; max-height:120px; overflow-y:auto; padding:12px 24px; display:flex; flex-direction:column; gap:6px; background:linear-gradient(transparent,rgba(6,6,10,0.95)); z-index:20; }
   .history-item { font-size:11px; color:var(--muted); }
 </style>
 </head>
 <body>
-
 <div class="ambient"></div>
 <div class="not-supported" id="notSupported">
   <h2>Browser Not Supported</h2>
   <p>ARIA requires the Web Speech API.<br>Please open this in <strong>Chrome</strong> or <strong>Edge</strong>.</p>
 </div>
-
 <div class="stage">
   <div class="header">
     <div class="brand">ARIA</div>
@@ -137,7 +127,6 @@
   </button>
   <div class="mic-hint" id="micHint">Tap the mic to begin</div>
 </div>
-
 <div class="history" id="history"></div>
 
 <script>
@@ -149,7 +138,6 @@ const statusLabel = document.getElementById('statusLabel');
 const transcript = document.getElementById('transcript');
 const micBtn = document.getElementById('micBtn');
 const waveform = document.getElementById('waveform');
-const historyEl = document.getElementById('history');
 
 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
   document.getElementById('notSupported').classList.add('show');
@@ -172,7 +160,7 @@ function initRecognition() {
     }
     if (final) handleUserSpeech(final.trim());
   };
-  recognition.onerror = () => setMode('idle', 'Error occurred.');
+  recognition.onerror = () => setMode('idle', 'Could not hear you.');
   recognition.onend = () => { isListening = false; if (orb.classList.contains('listening')) setMode('idle'); };
 }
 
@@ -212,10 +200,16 @@ async function handleUserSpeech(userText) {
     });
 
     const data = await res.json();
-    const reply = data.reply || "I'm sorry, I couldn't process that.";
+    
+    if (data.error) {
+       throw new Error(data.error);
+    }
+
+    const reply = data.reply || "I'm sorry, I couldn't respond.";
     speakText(reply);
   } catch(err) {
-    setMode('idle', 'Connection error.');
+    console.error("Fetch error:", err);
+    setMode('idle', "I'm sorry, I'm having trouble connecting right now.");
   }
 }
 
