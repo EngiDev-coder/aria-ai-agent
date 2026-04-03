@@ -23,18 +23,8 @@
     background:radial-gradient(ellipse,rgba(201,169,110,0.06) 0%,transparent 65%);
     animation:drift1 12s ease-in-out infinite alternate;
   }
-  .ambient::after {
-    content:''; position:absolute; bottom:5%; right:10%; width:400px; height:400px;
-    background:radial-gradient(ellipse,rgba(107,159,212,0.05) 0%,transparent 65%);
-    animation:drift2 15s ease-in-out infinite alternate;
-  }
   @keyframes drift1 { to { transform:translate(30px,-20px); } }
-  @keyframes drift2 { to { transform:translate(-20px,20px); } }
-  body::after {
-    content:''; position:fixed; inset:0;
-    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
-    pointer-events:none; z-index:100;
-  }
+
   .stage {
     position:relative; z-index:10; display:flex; flex-direction:column;
     align-items:center; width:100%; max-width:520px; padding:40px 24px;
@@ -43,10 +33,9 @@
   .brand {
     font-family:'Cormorant Garamond',serif; font-size:48px; font-weight:300;
     letter-spacing:0.3em; color:var(--gold); line-height:1;
-    text-shadow:0 0 40px rgba(201,169,110,0.3);
   }
   .brand-sub { font-size:9px; letter-spacing:0.5em; color:var(--muted); text-transform:uppercase; margin-top:8px; display:block; }
-  
+
   .orb-stage { position:relative; width:220px; height:220px; display:flex; align-items:center; justify-content:center; margin-bottom:40px; }
   .orb-core {
     width:90px; height:90px; border-radius:50%;
@@ -54,19 +43,16 @@
     box-shadow:0 0 30px rgba(201,169,110,0.25);
     transition:all 0.4s ease; cursor:pointer;
   }
-  .orb-core.listening { background:radial-gradient(circle at 35% 35%,rgba(163,200,232,0.9),rgba(107,159,212,0.6)); animation:pulse 1.2s infinite; }
-  .orb-core.thinking { opacity: 0.7; animation:pulse 0.8s infinite alternate; }
-  @keyframes pulse { 0% { transform: scale(1); } 100% { transform: scale(1.1); } }
+  .orb-core.listening { animation: pulse 1.5s infinite ease-in-out; box-shadow:0 0 50px var(--blue); }
+  .orb-core.thinking { opacity: 0.6; transform: scale(0.9); }
+  @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
 
   .status-area { text-align:center; min-height:80px; margin-bottom:36px; }
-  .transcript { font-family:'Cormorant Garamond',serif; font-style:italic; font-size:17px; color:rgba(237,233,225,0.7); }
-  
-  .mic-btn { 
-    width:72px; height:72px; border-radius:50%; border:2px solid rgba(201,169,110,0.3); 
-    background:rgba(14,14,22,0.8); cursor:pointer; display:flex; align-items:center; justify-content:center; 
-  }
+  .transcript { font-family:'Cormorant Garamond',serif; font-style:italic; font-size:17px; color:rgba(237,233,225,0.7); line-height:1.4; }
+
+  .mic-btn { width:72px; height:72px; border-radius:50%; border:2px solid rgba(201,169,110,0.3); background:rgba(14,14,22,0.8); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:0.3s; }
   .mic-btn svg { width:26px; height:26px; fill:var(--gold); }
-  .mic-btn.active { border-color:var(--blue); }
+  .mic-btn.active { border-color:var(--blue); box-shadow: 0 0 15px var(--blue); }
 </style>
 </head>
 <body>
@@ -84,7 +70,7 @@
   </div>
 
   <div class="status-area">
-    <div class="transcript" id="transcript">Ready to assist you.</div>
+    <div class="transcript" id="transcript">Tap the microphone to begin.</div>
   </div>
 
   <button class="mic-btn" id="micBtn" onclick="toggleListen()">
@@ -100,34 +86,26 @@ const orb = document.getElementById('orb');
 const transcript = document.getElementById('transcript');
 const micBtn = document.getElementById('micBtn');
 
-function initRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return alert("Web Speech API not supported in this browser.");
-  
-  recognition = new SR();
-  recognition.continuous = false;
-  recognition.lang = 'en-US';
-
-  recognition.onstart = () => { isListening = true; setMode('listening'); };
-  recognition.onresult = (e) => {
-    const text = e.results[0][0].transcript;
-    handleUserSpeech(text);
-  };
-  recognition.onend = () => { isListening = false; if(!isSpeaking) setMode('idle'); };
-}
-
 function setMode(mode) {
   orb.className = 'orb-core';
   micBtn.classList.remove('active');
   if (mode === 'listening') { orb.classList.add('listening'); micBtn.classList.add('active'); }
   else if (mode === 'thinking') { orb.classList.add('thinking'); }
-  else if (mode === 'speaking') { orb.classList.add('speaking'); }
 }
 
 function toggleListen() {
   if (isSpeaking) { window.speechSynthesis.cancel(); isSpeaking = false; setMode('idle'); return; }
-  if (!recognition) initRecognition();
-  isListening ? recognition.stop() : recognition.start();
+  
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!recognition) {
+    recognition = new SR();
+    recognition.onstart = () => { isListening = true; setMode('listening'); };
+    recognition.onresult = (e) => { handleUserSpeech(e.results[0][0].transcript); };
+    recognition.onend = () => { isListening = false; if(!isSpeaking) setMode('idle'); };
+  }
+  
+  if (isListening) recognition.stop();
+  else recognition.start();
 }
 
 async function handleUserSpeech(userText) {
@@ -142,12 +120,12 @@ async function handleUserSpeech(userText) {
     });
 
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
+    if (!res.ok) throw new Error(data.error || "Connection error");
 
     speakText(data.reply);
   } catch(err) {
-    console.error(err);
-    transcript.textContent = "Connection error.";
+    console.error("ARIA Error:", err);
+    transcript.textContent = "Error: " + err.message;
     setMode('idle');
   }
 }
@@ -155,7 +133,7 @@ async function handleUserSpeech(userText) {
 function speakText(text) {
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text);
-  utter.onstart = () => { isSpeaking = true; setMode('speaking'); transcript.textContent = text; };
+  utter.onstart = () => { isSpeaking = true; orb.classList.add('listening'); transcript.textContent = text; };
   utter.onend = () => { isSpeaking = false; setMode('idle'); };
   window.speechSynthesis.speak(utter);
 }
