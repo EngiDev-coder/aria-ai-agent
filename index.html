@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIA — Voice Receptionist</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #06060a; --surface: #0e0e16; --border: #1a1a2a;
+    --gold: #c9a96e; --gold2: #e8d5a3; --blue: #6b9fd4;
+    --text: #ede9e1; --muted: #5a5770;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background:var(--bg); color:var(--text); font-family:'DM Mono',monospace;
+    height:100vh; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; overflow:hidden; position:relative;
+  }
+  .ambient { position:fixed; inset:0; pointer-events:none; z-index:0; }
+  .ambient::before {
+    content:''; position:absolute; top:10%; left:20%; width:500px; height:500px;
+    background:radial-gradient(ellipse,rgba(201,169,110,0.06) 0%,transparent 65%);
+    animation:drift1 12s ease-in-out infinite alternate;
+  }
+  .ambient::after {
+    content:''; position:absolute; bottom:5%; right:10%; width:400px; height:400px;
+    background:radial-gradient(ellipse,rgba(107,159,212,0.05) 0%,transparent 65%);
+    animation:drift2 15s ease-in-out infinite alternate;
+  }
+  @keyframes drift1 { to { transform:translate(30px,-20px); } }
+  @keyframes drift2 { to { transform:translate(-20px,20px); } }
+  body::after {
+    content:''; position:fixed; inset:0;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+    pointer-events:none; z-index:100;
+  }
+
+  /* Not supported */
+  .not-supported {
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:var(--bg); z-index:200; text-align:center; padding:40px;
+    color:var(--muted); line-height:1.8; flex-direction:column; gap:16px;
+  }
+  .not-supported.show { display:flex; }
+  .not-supported h2 { font-family:'Cormorant Garamond',serif; font-size:28px; color:var(--gold); font-weight:300; }
+
+  /* Stage */
+  .stage {
+    position:relative; z-index:10; display:flex; flex-direction:column;
+    align-items:center; width:100%; max-width:520px; padding:40px 24px;
+  }
+  .header { text-align:center; margin-bottom:48px; animation:fadeDown 1s ease forwards; }
+  .brand {
+    font-family:'Cormorant Garamond',serif; font-size:48px; font-weight:300;
+    letter-spacing:0.3em; color:var(--gold); line-height:1;
+    text-shadow:0 0 40px rgba(201,169,110,0.3);
+  }
+  .brand-sub { font-size:9px; letter-spacing:0.5em; color:var(--muted); text-transform:uppercase; margin-top:8px; display:block; }
+  @keyframes fadeDown { from{opacity:0;transform:translateY(-16px)} to{opacity:1;transform:translateY(0)} }
+
+  /* Orb */
+  .orb-stage { position:relative; width:220px; height:220px; display:flex; align-items:center; justify-content:center; margin-bottom:40px; }
+  .ring { position:absolute; border-radius:50%; border:1px solid transparent; }
+  .ring-1 { width:220px; height:220px; border-color:rgba(201,169,110,0.12); animation:ring-spin 20s linear infinite; }
+  .ring-2 { width:178px; height:178px; border-color:rgba(107,159,212,0.10); animation:ring-spin 14s linear infinite reverse; }
+  .ring-3 { width:138px; height:138px; border-color:rgba(201,169,110,0.08); animation:ring-spin 9s linear infinite; }
+  .ring-1::before,.ring-2::before,.ring-3::before {
+    content:''; position:absolute; width:6px; height:6px; background:var(--gold);
+    border-radius:50%; top:50%; left:-3px; margin-top:-3px; box-shadow:0 0 8px var(--gold);
+  }
+  .ring-2::before { background:var(--blue); box-shadow:0 0 8px var(--blue); }
+  @keyframes ring-spin { to{transform:rotate(360deg)} }
+
+  .orb-core {
+    width:90px; height:90px; border-radius:50%;
+    background:radial-gradient(circle at 35% 35%,rgba(232,213,163,0.9),rgba(201,169,110,0.6),rgba(100,80,40,0.8));
+    box-shadow:0 0 30px rgba(201,169,110,0.25),0 0 60px rgba(201,169,110,0.1),inset 0 0 20px rgba(255,240,200,0.15);
+    position:relative; z-index:5; transition:all 0.4s ease; cursor:pointer;
+  }
+  .orb-core::before {
+    content:''; position:absolute; top:12%; left:18%; width:28%; height:18%;
+    background:rgba(255,255,255,0.2); border-radius:50%; transform:rotate(-30deg);
+  }
+  .orb-core.listening {
+    background:radial-gradient(circle at 35% 35%,rgba(163,200,232,0.9),rgba(107,159,212,0.6),rgba(40,70,120,0.8));
+    box-shadow:0 0 40px rgba(107,159,212,0.35),0 0 80px rgba(107,159,212,0.15),inset 0 0 20px rgba(200,230,255,0.15);
+    animation:pulse-listen 1.2s ease-in-out infinite;
+  }
+  .orb-core.thinking {
+    background:radial-gradient(circle at 35% 35%,rgba(232,200,163,0.9),rgba(201,150,80,0.7),rgba(100,60,20,0.8));
+    animation:pulse-think 0.8s ease-in-out infinite alternate;
+  }
+  .orb-core.speaking { animation:pulse-speak 0.4s ease-in-out infinite alternate; box-shadow:0 0 50px rgba(201,169,110,0.4),0 0 100px rgba(201,169,110,0.15); }
+  @keyframes pulse-listen { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+  @keyframes pulse-think { from{transform:scale(0.97)} to{transform:scale(1.03)} }
+  @keyframes pulse-speak { from{transform:scale(1)} to{transform:scale(1.05)} }
+
+  .waveform { position:absolute; bottom:-28px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:3px; opacity:0; transition:opacity 0.3s; }
+  .waveform.active { opacity:1; }
+  .wave-bar { width:3px; background:var(--blue); border-radius:2px; animation:wave-anim 0.8s ease-in-out infinite; height:6px; }
+  .wave-bar:nth-child(1){animation-delay:0s}.wave-bar:nth-child(2){animation-delay:.1s}.wave-bar:nth-child(3){animation-delay:.2s}
+  .wave-bar:nth-child(4){animation-delay:.3s}.wave-bar:nth-child(5){animation-delay:.4s}.wave-bar:nth-child(6){animation-delay:.3s}
+  .wave-bar:nth-child(7){animation-delay:.2s}.wave-bar:nth-child(8){animation-delay:.1s}.wave-bar:nth-child(9){animation-delay:0s}
+  @keyframes wave-anim { 0%,100%{height:4px;opacity:.4} 50%{height:20px;opacity:1} }
+
+  /* Status */
+  .status-area { text-align:center; min-height:80px; display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:36px; }
+  .status-label { font-size:9px; letter-spacing:0.4em; text-transform:uppercase; color:var(--muted); transition:color 0.3s; }
+  .status-label.listening{color:var(--blue)} .status-label.thinking{color:var(--gold)} .status-label.speaking{color:var(--gold2)}
+  .transcript { font-family:'Cormorant Garamond',serif; font-style:italic; font-size:17px; color:rgba(237,233,225,0.7); text-align:center; line-height:1.6; min-height:52px; max-width:400px; padding:0 10px; }
+
+  /* Mic */
+  .mic-btn { width:72px; height:72px; border-radius:50%; border:2px solid rgba(201,169,110,0.3); background:rgba(14,14,22,0.8); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.3s; box-shadow:0 0 20px rgba(201,169,110,0.08); }
+  .mic-btn:hover { border-color:var(--gold); box-shadow:0 0 30px rgba(201,169,110,0.2); transform:scale(1.05); }
+  .mic-btn.active { border-color:var(--blue); background:rgba(107,159,212,0.08); box-shadow:0 0 30px rgba(107,159,212,0.25); }
+  .mic-btn svg { width:26px; height:26px; fill:var(--gold); transition:fill 0.3s; }
+  .mic-btn.active svg { fill:var(--blue); }
+  .mic-hint { font-size:9px; letter-spacing:0.25em; color:var(--muted); text-transform:uppercase; margin-top:10px; }
+
+  /* History */
+  .history { position:fixed; bottom:0; left:0; right:0; max-height:120px; overflow-y:auto; padding:12px 24px; display:flex; flex-direction:column; gap:6px; background:linear-gradient(transparent,rgba(6,6,10,0.95)); z-index:20; }
+  .history::-webkit-scrollbar{width:2px} .history::-webkit-scrollbar-thumb{background:var(--border)}
+  .history-item { font-size:11px; color:var(--muted); animation:slideIn 0.3s ease forwards; opacity:0; }
+  .history-item span.role-you{color:rgba(107,159,212,0.7)} .history-item span.role-aria{color:rgba(201,169,110,0.7)}
+  @keyframes slideIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body>
+
+<div class="ambient"></div>
+
+<div class="not-supported" id="notSupported">
+  <h2>Browser Not Supported</h2>
+  <p>ARIA requires the Web Speech API.<br>Please open this in <strong>Chrome</strong> or <strong>Edge</strong>.</p>
+</div>
+
+<div class="stage">
+  <div class="header">
+    <div class="brand">ARIA</div>
+    <span class="brand-sub">Voice Receptionist</span>
+  </div>
+  <div class="orb-stage">
+    <div class="ring ring-1"></div>
+    <div class="ring ring-2"></div>
+    <div class="ring ring-3"></div>
+    <div class="orb-core" id="orb"></div>
+    <div class="waveform" id="waveform">
+      <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+    </div>
+  </div>
+  <div class="status-area">
+    <div class="status-label" id="statusLabel">Tap to speak</div>
+    <div class="transcript" id="transcript">Good day. I'm ARIA, your voice receptionist.</div>
+  </div>
+  <button class="mic-btn" id="micBtn" onclick="toggleListen()">
+    <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2H3v2a9 9 0 0 0 8 8.94V23h2v-2.06A9 9 0 0 0 21 12v-2h-2z"/></svg>
+  </button>
+  <div class="mic-hint" id="micHint">Tap the mic to begin</div>
+</div>
+
+<div class="history" id="history"></div>
+
+<script>
+// Points to your backend proxy — no API key needed in the browser
+const API_URL = "/api/chat";
+
+const SYSTEM_PROMPT = `You are ARIA, a warm, gracious AI voice receptionist. Keep every response to 2-3 short sentences maximum — this is a voice interface. Be calm, professional, helpful. No markdown, no bullet points, no asterisks — plain spoken sentences only. Like a concierge at a five-star hotel.`;
+
+const conversationHistory = [];
+let recognition = null, isListening = false, isSpeaking = false;
+
+const orb         = document.getElementById('orb');
+const statusLabel = document.getElementById('statusLabel');
+const transcript  = document.getElementById('transcript');
+const micBtn      = document.getElementById('micBtn');
+const waveform    = document.getElementById('waveform');
+const micHint     = document.getElementById('micHint');
+const historyEl   = document.getElementById('history');
+
+// Browser check
+if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+  document.getElementById('notSupported').classList.add('show');
+} else {
+  initRecognition();
+  setTimeout(() => speakText("Good day. I'm ARIA, your voice receptionist. How may I assist you today?"), 800);
+}
+
+function initRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SR();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  recognition.onstart = () => { isListening = true; setMode('listening'); };
+
+  recognition.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) final += t; else interim += t;
+    }
+    transcript.textContent = final || interim || '…';
+    if (final) handleUserSpeech(final.trim());
+  };
+
+  recognition.onerror = (e) => {
+    isListening = false;
+    if (e.error === 'not-allowed')
+      setMode('idle', 'Microphone blocked. Please allow access in your browser settings.');
+    else if (e.error === 'no-speech')
+      setMode('idle', 'No speech detected. Tap the mic and try again.');
+    else
+      setMode('idle', 'Could not hear you. Please try again.');
+  };
+
+  recognition.onend = () => {
+    isListening = false;
+    if (orb.classList.contains('listening')) setMode('idle');
+  };
+}
+
+function setMode(mode, message) {
+  orb.className = 'orb-core';
+  waveform.classList.remove('active');
+  micBtn.classList.remove('active');
+  statusLabel.className = 'status-label';
+
+  if (mode === 'listening') {
+    orb.classList.add('listening'); waveform.classList.add('active'); micBtn.classList.add('active');
+    statusLabel.textContent = 'Listening…'; statusLabel.classList.add('listening');
+    transcript.textContent = '…'; micHint.textContent = 'Tap to stop';
+  } else if (mode === 'thinking') {
+    orb.classList.add('thinking');
+    statusLabel.textContent = 'Processing…'; statusLabel.classList.add('thinking');
+    micHint.textContent = 'Please wait…';
+  } else if (mode === 'speaking') {
+    orb.classList.add('speaking');
+    statusLabel.textContent = 'Speaking…'; statusLabel.classList.add('speaking');
+    micHint.textContent = 'Tap to interrupt';
+  } else {
+    statusLabel.textContent = 'Tap to speak'; micHint.textContent = 'Tap the mic to begin';
+    if (message) transcript.textContent = message;
+  }
+}
+
+function toggleListen() {
+  if (isSpeaking) { window.speechSynthesis.cancel(); isSpeaking = false; setMode('idle'); return; }
+  if (isListening) { recognition.stop(); isListening = false; setMode('idle'); }
+  else if (recognition) recognition.start();
+}
+
+function addHistory(role, text) {
+  const div = document.createElement('div');
+  div.className = 'history-item';
+  const short = text.length > 80 ? text.slice(0,77)+'…' : text;
+  div.innerHTML = `<span class="role-${role==='user'?'you':'aria'}">${role==='user'?'You':'ARIA'}</span>: ${short}`;
+  historyEl.appendChild(div);
+  historyEl.scrollTop = historyEl.scrollHeight;
+}
+
+async function handleUserSpeech(userText) {
+  if (!userText) return;
+  addHistory('user', userText);
+  conversationHistory.push({ role:'user', content:userText });
+  setMode('thinking');
+  transcript.textContent = userText;
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 300,
+        system: SYSTEM_PROMPT,
+        messages: conversationHistory
+      })
+    });
+
+    if (!res.ok) {
+      const e = await res.json().catch(()=>({}));
+      throw new Error(e?.error?.message || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const reply = data.content?.find(b=>b.type==='text')?.text || 'I apologize, I was unable to respond.';
+    conversationHistory.push({ role:'assistant', content:reply });
+    addHistory('aria', reply);
+    speakText(reply);
+
+  } catch(err) {
+    console.error('ARIA error:', err);
+    speakText("I'm sorry, there was a technical issue. Please try again in a moment.");
+    setMode('idle', 'Connection error — please try again.');
+  }
+}
+
+function speakText(text) {
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 0.92; utter.pitch = 1.05; utter.volume = 1;
+
+  const voices = window.speechSynthesis.getVoices();
+  const voice = voices.find(v =>
+    v.name.includes('Samantha') || v.name.includes('Karen') ||
+    v.name.includes('Google UK English Female') || v.name.includes('Microsoft Zira') ||
+    (v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+  ) || voices.find(v => v.lang.startsWith('en'));
+  if (voice) utter.voice = voice;
+
+  utter.onstart = () => { isSpeaking=true; setMode('speaking'); transcript.textContent=text; };
+  utter.onend   = () => { isSpeaking=false; setMode('idle'); };
+  utter.onerror = () => { isSpeaking=false; setMode('idle'); };
+  window.speechSynthesis.speak(utter);
+}
+
+window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+window.speechSynthesis.getVoices();
+</script>
+</body>
+</html>
